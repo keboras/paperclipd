@@ -94,6 +94,8 @@ docker run --name paperclip \
   paperclip-local
 ```
 
+The `-v …:/paperclip` line is required for persistence; without it, removing the container deletes all Paperclip data under `/paperclip`.
+
 Or use Compose:
 
 ```sh

@@ -41,6 +41,8 @@ docker run --name paperclip \
 
 ## Data Persistence
 
+`PAPERCLIP_HOME` is `/paperclip`. For **`docker run`**, you must pass `-v` or `--mount` for that path; without it, data is only in the container layer and is **deleted when the container is removed**. Compose examples below already attach storage. Hosted platforms (e.g. Railway) need a volume mounted at `/paperclip`. The image does not declare `VOLUME` in the Dockerfile, so Docker will **not** auto-create an anonymous volume.
+
 All data is persisted under the bind mount (`./data/docker-paperclip`):
 
 - Embedded PostgreSQL data

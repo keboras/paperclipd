@@ -76,6 +76,7 @@ ENV NODE_ENV=production \
   PAPERCLIP_DEPLOYMENT_EXPOSURE=private \
   OPENCODE_ALLOW_ALL_MODELS=true
 
+# Persist /paperclip with -v, Compose, or a host volume (no VOLUME line—required e.g. on Railway).
 EXPOSE 3100
 
 ENTRYPOINT ["docker-entrypoint.sh"]

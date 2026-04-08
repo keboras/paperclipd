@@ -24,6 +24,16 @@ docker build -t paperclip-local \
   --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) .
 ```
 
+## Persisting `/paperclip`
+
+The image sets `PAPERCLIP_HOME=/paperclip`. Anything stored there (embedded DB, config, uploads, agent workspace) **must** be backed by a **bind mount, named volume, or your platform’s volume** — otherwise it lives only in the container’s writable layer and is **lost when the container is removed** (`docker rm`).
+
+- **`docker run`**: always pass `-v …:/paperclip` or an equivalent `--mount` (see examples below). If you omit this, you get a throwaway instance.
+- **Docker Compose**: the compose files in `docker/` already map storage to `/paperclip`.
+- **Railway / similar**: attach a volume mounted at `/paperclip`. The Dockerfile intentionally does **not** use the `VOLUME` instruction (some hosts reject it).
+
+**Breaking change:** Images that previously declared `VOLUME ["/paperclip"]` caused Docker to create an **anonymous** volume by default, so replacing the container often kept data. That declaration is removed for compatibility with stricter hosts. **You are responsible for an explicit mount** if you want persistence.
+
 ## One-liner (build + run)
 
 ```sh
