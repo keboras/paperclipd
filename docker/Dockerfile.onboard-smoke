@@ -32,7 +32,6 @@ RUN apt-get update \
   && chown -R paperclip:paperclip /paperclip /home/paperclip \
   && rm -rf /var/lib/apt/lists/*
 
-VOLUME ["/paperclip"]
 WORKDIR /home/paperclip/workspace
 EXPOSE 3100
 USER paperclip
