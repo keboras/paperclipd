@@ -37,6 +37,25 @@ import { isBedrockModelId } from "./models.js";
 const __moduleDir = path.dirname(fileURLToPath(import.meta.url));
 
 /**
+ * Link a skill directory into the ephemeral `.claude/skills/` tree.
+ * Windows often denies symlinks without Developer Mode; directory junctions
+ * usually work, and we fall back to a recursive copy if linking still fails.
+ */
+async function linkSkillSourceIntoSkillsDir(source: string, linkPath: string): Promise<void> {
+  const resolvedSource = path.resolve(source);
+  if (os.platform() === "win32") {
+    try {
+      await fs.symlink(resolvedSource, linkPath, "junction");
+      return;
+    } catch {
+      await fs.cp(resolvedSource, linkPath, { recursive: true });
+      return;
+    }
+  }
+  await fs.symlink(resolvedSource, linkPath);
+}
+
+/**
  * Create a tmpdir with `.claude/skills/` containing symlinks to skills from
  * the repo's `skills/` directory, so `--add-dir` makes Claude Code discover
  * them as proper registered skills.
@@ -54,10 +73,7 @@ async function buildSkillsDir(config: Record<string, unknown>): Promise<string> 
   );
   for (const entry of availableEntries) {
     if (!desiredNames.has(entry.key)) continue;
-    await fs.symlink(
-      entry.source,
-      path.join(target, entry.runtimeName),
-    );
+    await linkSkillSourceIntoSkillsDir(entry.source, path.join(target, entry.runtimeName));
   }
   return tmp;
 }

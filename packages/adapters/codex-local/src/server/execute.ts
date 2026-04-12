@@ -13,6 +13,7 @@ import {
   ensureAbsoluteDirectory,
   ensureCommandResolvable,
   ensurePaperclipSkillSymlink,
+  linkPaperclipSkillSourceForAdapter,
   ensurePathInEnv,
   readPaperclipRuntimeSkillEntries,
   resolveCommandForLogs,
@@ -182,7 +183,7 @@ export async function ensureCodexSkillsInjected(
           if (linkSkill) {
             await linkSkill(entry.source, target);
           } else {
-            await fs.symlink(entry.source, target);
+            await linkPaperclipSkillSourceForAdapter(entry.source, target);
           }
           await onLog(
             "stdout",
@@ -387,6 +388,24 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       (entry): entry is [string, string] => typeof entry[1] === "string",
     ),
   );
+  const sharedCodexHome = resolveSharedCodexHomeDir(process.env);
+  const sharedAuthPath = path.join(sharedCodexHome, "auth.json");
+  const managedAuthPath = path.join(effectiveCodexHome, "auth.json");
+  const hasOpenAiKey = hasNonEmptyEnvValue(effectiveEnv, "OPENAI_API_KEY");
+  const hasSharedAuth = await pathExists(sharedAuthPath);
+  const hasManagedAuth = await pathExists(managedAuthPath);
+  if (!hasOpenAiKey && !hasSharedAuth) {
+    await onLog(
+      "stdout",
+      `[paperclip] Warning: Codex has no credentials: OPENAI_API_KEY is not set and ${sharedAuthPath} does not exist. Set the API key (server env, Paperclip .env, or codex_local agent env) or run \`codex auth\` to create auth.json, then restart Paperclip.\n`,
+    );
+  } else if (!hasOpenAiKey && hasSharedAuth && !hasManagedAuth) {
+    await onLog(
+      "stdout",
+      `[paperclip] Warning: Codex auth exists at ${sharedAuthPath} but managed home is missing ${managedAuthPath}; check permissions or disk space.\n`,
+    );
+  }
+
   const billingType = resolveCodexBillingType(effectiveEnv);
   const runtimeEnv = ensurePathInEnv(effectiveEnv);
   await ensureCommandResolvable(command, cwd, runtimeEnv);

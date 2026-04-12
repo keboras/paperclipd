@@ -78,6 +78,35 @@ export interface Config {
   telemetryEnabled: boolean;
 }
 
+/**
+ * Better Auth requires an absolute URL (with scheme). Deploy envs often set only the host
+ * (e.g. Railway: `app.up.railway.app`). Prepend https://, or http:// for obvious local hosts.
+ */
+function normalizeAuthPublicBaseUrl(raw: string | undefined): string | undefined {
+  const trimmed = raw?.trim();
+  if (!trimmed) return undefined;
+  try {
+    new URL(trimmed);
+    return trimmed;
+  } catch {
+    const lower = trimmed.toLowerCase();
+    const local =
+      lower === "localhost" ||
+      lower.startsWith("localhost:") ||
+      lower === "127.0.0.1" ||
+      lower.startsWith("127.0.0.1:") ||
+      lower.startsWith("[::1]");
+    const prefix = local ? "http://" : "https://";
+    const candidate = `${prefix}${trimmed}`;
+    try {
+      new URL(candidate);
+      return candidate;
+    } catch {
+      return trimmed;
+    }
+  }
+}
+
 export function loadConfig(): Config {
   const fileConfig = readConfigFile();
   const fileDatabaseMode =
@@ -161,7 +190,7 @@ export function loadConfig(): Config {
     process.env.BETTER_AUTH_BASE_URL ??
     publicUrlFromEnv ??
     fileConfig?.auth?.publicBaseUrl;
-  const authPublicBaseUrl = authPublicBaseUrlRaw?.trim() || undefined;
+  const authPublicBaseUrl = normalizeAuthPublicBaseUrl(authPublicBaseUrlRaw);
   const authBaseUrlMode: AuthBaseUrlMode =
     authBaseUrlModeFromEnv ??
     fileConfig?.auth?.baseUrlMode ??

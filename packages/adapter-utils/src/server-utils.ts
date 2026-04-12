@@ -839,11 +839,29 @@ export function writePaperclipSkillSyncPreference(
   return next;
 }
 
+/**
+ * Link a Paperclip skill directory into an adapter skills home. Windows often
+ * denies bare directory symlinks without Developer Mode; directory junctions
+ * usually work, then we fall back to a recursive copy.
+ */
+export async function linkPaperclipSkillSourceForAdapter(source: string, target: string): Promise<void> {
+  const resolvedSource = path.resolve(source);
+  if (process.platform === "win32") {
+    try {
+      await fs.symlink(resolvedSource, target, "junction");
+      return;
+    } catch {
+      await fs.cp(resolvedSource, target, { recursive: true });
+      return;
+    }
+  }
+  await fs.symlink(resolvedSource, target);
+}
+
 export async function ensurePaperclipSkillSymlink(
   source: string,
   target: string,
-  linkSkill: (source: string, target: string) => Promise<void> = (linkSource, linkTarget) =>
-    fs.symlink(linkSource, linkTarget),
+  linkSkill: (source: string, target: string) => Promise<void> = linkPaperclipSkillSourceForAdapter,
 ): Promise<"created" | "repaired" | "skipped"> {
   const existing = await fs.lstat(target).catch(() => null);
   if (!existing) {

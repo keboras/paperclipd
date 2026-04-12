@@ -42,26 +42,33 @@ async function ensureParentDir(target: string): Promise<void> {
   await fs.mkdir(path.dirname(target), { recursive: true });
 }
 
-async function ensureSymlink(target: string, source: string): Promise<void> {
+/**
+ * Mirror a shared file (e.g. auth.json) into the managed Codex home.
+ * Replaces stale plain files (legacy bug: old code left wrong files and skipped updates).
+ * On Windows, file symlinks often fail without Developer Mode; fall back to copyFile.
+ */
+async function ensureFileLinkedOrCopiedFromShared(target: string, source: string): Promise<void> {
+  const resolvedSource = path.resolve(source);
   const existing = await fs.lstat(target).catch(() => null);
-  if (!existing) {
-    await ensureParentDir(target);
-    await fs.symlink(source, target);
-    return;
+  if (existing?.isSymbolicLink()) {
+    const linkedPath = await fs.readlink(target).catch(() => null);
+    const resolvedLinkedPath = linkedPath ? path.resolve(path.dirname(target), linkedPath) : null;
+    if (resolvedLinkedPath === resolvedSource) return;
+    await fs.unlink(target);
+  } else if (existing) {
+    await fs.rm(target, { force: true });
   }
 
-  if (!existing.isSymbolicLink()) {
+  await ensureParentDir(target);
+  if (process.platform === "win32") {
+    try {
+      await fs.symlink(resolvedSource, target, "file");
+    } catch {
+      await fs.copyFile(resolvedSource, target);
+    }
     return;
   }
-
-  const linkedPath = await fs.readlink(target).catch(() => null);
-  if (!linkedPath) return;
-
-  const resolvedLinkedPath = path.resolve(path.dirname(target), linkedPath);
-  if (resolvedLinkedPath === source) return;
-
-  await fs.unlink(target);
-  await fs.symlink(source, target);
+  await fs.symlink(resolvedSource, target);
 }
 
 async function ensureCopiedFile(target: string, source: string): Promise<void> {
@@ -86,7 +93,7 @@ export async function prepareManagedCodexHome(
   for (const name of SYMLINKED_SHARED_FILES) {
     const source = path.join(sourceHome, name);
     if (!(await pathExists(source))) continue;
-    await ensureSymlink(path.join(targetHome, name), source);
+    await ensureFileLinkedOrCopiedFromShared(path.join(targetHome, name), source);
   }
 
   for (const name of COPIED_SHARED_FILES) {
