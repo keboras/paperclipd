@@ -1,6 +1,7 @@
 import { readConfigFile } from "./config-file.js";
 import { existsSync, realpathSync } from "node:fs";
-import { resolve } from "node:path";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { config as loadDotenv } from "dotenv";
 import { resolvePaperclipEnvPath } from "./paths.js";
 import { maybeRepairLegacyWorktreeConfigAndEnvFiles } from "./worktree-config.js";
@@ -24,17 +25,53 @@ import {
   resolveHomeAwarePath,
 } from "./home-paths.js";
 
-const PAPERCLIP_ENV_FILE_PATH = resolvePaperclipEnvPath();
-if (existsSync(PAPERCLIP_ENV_FILE_PATH)) {
-  loadDotenv({ path: PAPERCLIP_ENV_FILE_PATH, override: false, quiet: true });
+function findAncestorDirContaining(markerName: string, startDir: string): string | null {
+  let current = path.resolve(startDir);
+  for (let depth = 0; depth < 24; depth += 1) {
+    if (existsSync(path.join(current, markerName))) return current;
+    const parent = path.dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+  return null;
 }
 
-const CWD_ENV_PATH = resolve(process.cwd(), ".env");
-const isSameFile = existsSync(CWD_ENV_PATH) && existsSync(PAPERCLIP_ENV_FILE_PATH)
-  ? realpathSync(CWD_ENV_PATH) === realpathSync(PAPERCLIP_ENV_FILE_PATH)
-  : CWD_ENV_PATH === PAPERCLIP_ENV_FILE_PATH;
-if (!isSameFile && existsSync(CWD_ENV_PATH)) {
-  loadDotenv({ path: CWD_ENV_PATH, override: false, quiet: true });
+function resolveMonorepoRootDir(): string | null {
+  const serverPackageDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+  return (
+    findAncestorDirContaining("pnpm-workspace.yaml", process.cwd()) ??
+    findAncestorDirContaining("pnpm-workspace.yaml", serverPackageDir)
+  );
+}
+
+function realpathOrSelf(filePath: string): string {
+  try {
+    return realpathSync(filePath);
+  } catch {
+    return filePath;
+  }
+}
+
+function loadDotenvIfNewFile(filePath: string, alreadyLoaded: Set<string>): void {
+  if (!existsSync(filePath)) return;
+  const key = realpathOrSelf(filePath);
+  if (alreadyLoaded.has(key)) return;
+  loadDotenv({ path: filePath, override: false, quiet: true });
+  alreadyLoaded.add(key);
+}
+
+const loadedEnvRealpaths = new Set<string>();
+
+const PAPERCLIP_ENV_FILE_PATH = resolvePaperclipEnvPath();
+loadDotenvIfNewFile(PAPERCLIP_ENV_FILE_PATH, loadedEnvRealpaths);
+
+const CWD_ENV_PATH = path.resolve(process.cwd(), ".env");
+loadDotenvIfNewFile(CWD_ENV_PATH, loadedEnvRealpaths);
+
+const monorepoRoot = resolveMonorepoRootDir();
+const MONOREPO_ENV_PATH = monorepoRoot ? path.join(monorepoRoot, ".env") : null;
+if (MONOREPO_ENV_PATH) {
+  loadDotenvIfNewFile(MONOREPO_ENV_PATH, loadedEnvRealpaths);
 }
 
 maybeRepairLegacyWorktreeConfigAndEnvFiles();
